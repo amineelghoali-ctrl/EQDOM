@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Espace Responsable | EQDOM</title>
+  <script>
+    tailwind = { config: { theme: { extend: { colors: { blue: {
+      50: '#fff1f2', 100: '#ffe4e6', 200: '#fecdd3', 300: '#fda4af',
+      400: '#fb7185', 500: '#f43f5e', 600: '#e11d48', 700: '#be123c',
+      800: '#9f1239', 900: '#881337', 950: '#4c0519'
+    } } } } };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>#eqdom-responsable-header { background: linear-gradient(105deg, #7f1d1d, #dc2626); }</style>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-900">
+  <header id="eqdom-responsable-header" class="text-white">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
+      <a href="/" class="font-bold tracking-wide">EQDOM <span class="font-normal text-red-100">Espace Responsable</span></a>
+      <div class="flex items-center gap-3 text-sm">
+        <span class="hidden sm:inline">Responsable : {{ request.user.username }}</span>
+        <a href="/dashboard/" class="rounded-lg bg-white/10 px-3 py-2 hover:bg-white/20">Dashboard agent</a>
+        <form method="post" action="/api-auth/logout/">{% csrf_token %}<button class="rounded-lg bg-white/10 px-3 py-2 hover:bg-white/20" type="submit">Déconnexion</button></form>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl px-5 py-8">
+    <div class="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+      <div>
+        <p class="text-sm font-bold uppercase tracking-[.18em] text-blue-700">Décision & validation</p>
+        <h1 class="mt-1 text-3xl font-bold">Supervision des dossiers</h1>
+        <p class="mt-2 text-slate-600">Suivez les dossiers de tous les agents, validez le financement ou transmettez un refus motivé.</p>
+      </div>
+      <label class="text-sm font-semibold text-slate-700">Filtrer par agent
+        <select id="agent-filter" class="mt-1 block min-w-48 rounded-xl border-slate-300 bg-white px-3 py-2">
+          <option value="">Tous les agents</option>
+        </select>
+      </label>
+    </div>
+
+    <section class="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <article class="rounded-2xl bg-blue-700 p-5 text-white"><p class="text-sm text-blue-100">Dossiers suivis</p><p id="kpi-total" class="mt-2 text-3xl font-bold">—</p></article>
+      <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200"><p class="text-sm text-slate-500">En validation</p><p id="kpi-pending" class="mt-2 text-3xl font-bold text-orange-500">—</p></article>
+      <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200"><p class="text-sm text-slate-500">Financements</p><p id="kpi-financing" class="mt-2 text-3xl font-bold text-emerald-600">—</p></article>
+      <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200"><p class="text-sm text-slate-500">Refus</p><p id="kpi-refused" class="mt-2 text-3xl font-bold text-red-600">—</p></article>
+      <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200"><p class="text-sm text-slate-500">Taux d’acceptation</p><p id="kpi-acceptance" class="mt-2 text-3xl font-bold text-blue-700">—</p></article>
+    </section>
+
+    <p id="page-message" class="mb-5 hidden rounded-xl p-4 text-sm"></p>
+    <section class="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
+      <div class="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+        <div><h2 class="text-lg font-bold">File de validation</h2><p class="mt-1 text-sm text-slate-500">Les décisions sont disponibles uniquement à l'étape « En attente de validation ».</p></div>
+        <div class="flex items-center gap-3"><a id="csv-export" href="/api/v1/responsable/dossiers/export-csv/" class="rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">⬇ Export CSV</a><span id="dossier-count" class="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-800">0 dossier</span></div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-5 py-4">Client / CIN</th><th class="px-5 py-4">Créé par</th><th class="px-5 py-4">Assigné à</th><th class="px-5 py-4">Statut</th><th class="px-5 py-4">Échanges</th><th class="px-5 py-4 text-right">Actions</th></tr></thead>
+          <tbody id="dossiers-body" class="divide-y divide-slate-100"><tr><td colspan="6" class="px-5 py-10 text-center text-slate-500">Chargement des dossiers…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="comment-panel" class="mt-8 hidden rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p class="text-sm font-bold uppercase tracking-wide text-blue-700">Échanges avec l’agent</p><h2 id="comment-title" class="mt-1 text-xl font-bold">—</h2><p id="comment-subtitle" class="mt-1 text-sm text-slate-500">—</p></div><button id="close-comments" class="text-sm font-semibold text-slate-500 hover:text-slate-900">Fermer ×</button></div>
+      <div id="comments-list" class="mt-5 space-y-3 rounded-xl bg-slate-50 p-4"><p class="text-sm text-slate-500">Chargement des échanges…</p></div>
+      <form id="responsable-comment-form" class="mt-5"><label class="block text-sm font-semibold">Message à l’agent<textarea id="responsable-comment-content" required maxlength="3000" rows="4" class="mt-2 block w-full rounded-xl border-slate-300 p-3" placeholder="Ex. Merci de compléter le justificatif de revenu avant financement."></textarea></label><button class="mt-3 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800" type="submit">Envoyer au workflow</button></form>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const body = document.querySelector('#dossiers-body');
+      const filter = document.querySelector('#agent-filter');
+      const message = document.querySelector('#page-message');
+      const panel = document.querySelector('#comment-panel');
+      let dossiers = [];
+      let selected = null;
+      const csrf = () => document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
+      const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+      const statusClasses = {PENDING_VALIDATION: 'bg-orange-100 text-orange-800', FINANCEMENT: 'bg-emerald-100 text-emerald-800', REFUSE: 'bg-red-100 text-red-800', PRE_APPROVED: 'bg-blue-50 text-blue-800', PENDING_DOCS: 'bg-orange-100 text-orange-800', SCAN_COMPLETED: 'bg-slate-100 text-slate-700'};
+      function showMessage(text, type = 'success') { message.textContent = text; message.className = `mb-5 rounded-xl p-4 text-sm ${type === 'error' ? 'bg-red-50 text-red-800' : 'bg-emerald-50 text-emerald-800'}`; }
+      async function request(url, options = {}) { const response = await fetch(url, {credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf(), ...(options.headers || {})}, ...options}); const data = await response.json(); if (!response.ok) throw new Error(data.detail || 'Action impossible.'); return data; }
+      function render() { document.querySelector('#dossier-count').textContent = `${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`; body.innerHTML = dossiers.length ? dossiers.map(dossier => { const pending = dossier.current_status === 'PENDING_VALIDATION'; return `<tr><td class="px-5 py-4"><p class="font-bold">${escapeHtml(dossier.client_name)}</p><p class="mt-1 font-mono text-xs text-slate-500">${escapeHtml(dossier.cin_number)}</p></td><td class="px-5 py-4 font-medium">${escapeHtml(dossier.created_by_name)}</td><td class="px-5 py-4">${escapeHtml(dossier.assigned_agent_name)}</td><td class="px-5 py-4"><span class="rounded-full px-2.5 py-1 text-xs font-bold ${statusClasses[dossier.current_status] || 'bg-slate-100 text-slate-700'}">${escapeHtml(dossier.status_label)}</span></td><td class="px-5 py-4 text-slate-600">${dossier.comments_count}</td><td class="px-5 py-4"><div class="flex justify-end gap-2">${pending ? `<button data-decision="APPROVE" data-id="${dossier.id}" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">✓ Valider</button><button data-decision="REJECT" data-id="${dossier.id}" class="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700">✕ Refuser</button>` : ''}<button data-comment="${dossier.id}" class="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800">💬 Commenter</button></div></td></tr>`; }).join('') : '<tr><td colspan="6" class="px-5 py-10 text-center text-slate-500">Aucun dossier pour ce filtre.</td></tr>'; }
+      async function loadDossiers() { try { const query = filter.value ? `?agent=${encodeURIComponent(filter.value)}` : ''; const data = await request(`/api/v1/responsable/dossiers/${query}`); dossiers = data.dossiers; if (filter.options.length === 1) data.agents.forEach(agent => filter.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(agent.username)}">${escapeHtml(agent.username)}</option>`)); const kpi = data.kpis; document.querySelector('#kpi-total').textContent=kpi.total_dossiers; document.querySelector('#kpi-pending').textContent=kpi.en_attente_validation; document.querySelector('#kpi-financing').textContent=kpi.financements; document.querySelector('#kpi-refused').textContent=kpi.refus; document.querySelector('#kpi-acceptance').textContent=`${kpi.taux_acceptation} %`; document.querySelector('#csv-export').href=`/api/v1/responsable/dossiers/export-csv/${query}`; render(); } catch (error) { body.innerHTML = `<tr><td colspan="6" class="px-5 py-10 text-center text-red-700">${escapeHtml(error.message)}</td></tr>`; } }
+      async function loadComments() { const data = await request(`/api/v1/workflow/${encodeURIComponent(selected.cin_number)}/`); const comments = data.comments || []; document.querySelector('#comments-list').innerHTML = comments.length ? comments.map(comment => `<article class="rounded-xl bg-white p-4 shadow-sm"><p class="font-bold text-slate-800">${escapeHtml(comment.author_name)}</p><p class="mt-1 text-sm text-slate-700">${escapeHtml(comment.content)}</p>${(comment.replies || []).map(reply => `<p class="mt-2 border-l-2 border-blue-200 pl-3 text-sm text-slate-600"><strong>${escapeHtml(reply.author_name)} :</strong> ${escapeHtml(reply.content)}</p>`).join('')}</article>`).join('') : '<p class="text-sm text-slate-500">Aucun échange pour ce dossier.</p>'; }
+      body.addEventListener('click', async event => { const decision = event.target.closest('[data-decision]'); const comment = event.target.closest('[data-comment]'); try { if (comment) { selected = dossiers.find(item => item.id === Number(comment.dataset.comment)); document.querySelector('#comment-title').textContent = selected.client_name; document.querySelector('#comment-subtitle').textContent = `CIN ${selected.cin_number} · Agent créateur : ${selected.created_by_name}`; panel.classList.remove('hidden'); await loadComments(); panel.scrollIntoView({behavior: 'smooth', block: 'start'}); return; } if (!decision) return; const action = decision.dataset.decision; const dossier = dossiers.find(item => item.id === Number(decision.dataset.id)); let motif_refus = ''; if (action === 'REJECT') { motif_refus = window.prompt(`Motif du refus pour ${dossier.client_name} :`) || ''; if (!motif_refus.trim()) return; } if (!window.confirm(action === 'APPROVE' ? `Valider ${dossier.client_name} pour financement ?` : `Refuser ${dossier.client_name} ?`)) return; await request(`/api/v1/responsable/dossiers/${dossier.id}/decision/`, {method: 'POST', body: JSON.stringify({action, motif_refus})}); showMessage(action === 'APPROVE' ? 'Dossier validé pour financement. L’agent créateur a été informé dans le workflow.' : 'Dossier refusé. Le motif a été publié dans le workflow.'); await loadDossiers(); } catch (error) { showMessage(error.message, 'error'); } });
+      document.querySelector('#responsable-comment-form').addEventListener('submit', async event => { event.preventDefault(); if (!selected) return; const field = document.querySelector('#responsable-comment-content'); try { await request(`/api/v1/workflow/${encodeURIComponent(selected.cin_number)}/comments/`, {method: 'POST', body: JSON.stringify({content: field.value})}); field.value = ''; showMessage('Message publié dans le workflow de l’agent.'); await loadComments(); await loadDossiers(); } catch (error) { showMessage(error.message, 'error'); } });
+      document.querySelector('#close-comments').addEventListener('click', () => panel.classList.add('hidden'));
+      filter.addEventListener('change', loadDossiers);
+      loadDossiers();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<section id="agency-location-panel" class="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+  <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-wide text-blue-700">📍 Rattachement Agence & Localisation Client</p>
+      <h2 class="mt-1 text-lg font-bold">Agence EQDOM la plus proche</h2>
+      <p id="agency-location-summary" class="mt-1 text-sm text-slate-500">La localisation sera affichée après la recherche du dossier.</p>
+    </div>
+    <span id="agency-distance" class="hidden rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-800"></span>
+  </div>
+  <div id="agency-map" class="mt-5 h-80 overflow-hidden rounded-xl bg-slate-100" aria-label="Carte de rattachement agence"></div>
+  <p id="agency-location-note" class="mt-3 text-xs text-slate-500"></p>
+</section>
+
+<script>
+(() => {
+  let map, clientMarker, agencyMarker, routeLine;
+  const summary = document.querySelector('#agency-location-summary');
+  const distance = document.querySelector('#agency-distance');
+  const note = document.querySelector('#agency-location-note');
+  const redAgencyIcon = () => L.divIcon({className: '', html: '<span style="display:grid;place-items:center;width:32px;height:32px;border-radius:999px;background:#dc2626;border:3px solid white;box-shadow:0 2px 8px #0005;color:white;font-weight:900">E</span>', iconSize: [32, 32], iconAnchor: [16, 16]});
+  function initialiseMap(latitude, longitude) {
+    if (!map) {
+      map = L.map('agency-map', {scrollWheelZoom: false}).setView([latitude, longitude], 8);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+    }
+  }
+  window.loadAgencyLocation = async cin => {
+    if (!window.L || !cin) return;
+    summary.textContent = 'Recherche de l’agence EQDOM la plus proche…';
+    distance.classList.add('hidden');
+    try {
+      const response = await fetch(`/api/v1/client/${encodeURIComponent(cin)}/agency-location/`, {credentials: 'same-origin'});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Localisation indisponible.');
+      const client = data.client, agency = data.agency;
+      const clientLatLng = [Number(client.latitude), Number(client.longitude)];
+      const agencyLatLng = [Number(agency.latitude), Number(agency.longitude)];
+      initialiseMap(...clientLatLng);
+      [clientMarker, agencyMarker, routeLine].forEach(layer => { if (layer) map.removeLayer(layer); });
+      clientMarker = L.marker(clientLatLng).addTo(map).bindPopup(`<strong>Client</strong><br>${client.ville}`);
+      agencyMarker = L.marker(agencyLatLng, {icon: redAgencyIcon()}).addTo(map).bindPopup(`<strong>${agency.name}</strong><br>${agency.city}`);
+      routeLine = L.polyline([clientLatLng, agencyLatLng], {color: '#dc2626', weight: 3, dashArray: '8 6'}).addTo(map);
+      map.fitBounds(routeLine.getBounds(), {padding: [45, 45], maxZoom: 12});
+      map.invalidateSize();
+      summary.textContent = `${agency.name} est attribuée au client situé à ${client.ville}.`;
+      distance.textContent = `${agency.distance_km.toLocaleString('fr-FR')} km`;
+      distance.classList.remove('hidden');
+      note.textContent = client.coordinates_source === 'casablanca_fallback' ? 'Coordonnées de secours Casablanca utilisées : le géocodage externe est momentanément indisponible.' : 'Coordonnées obtenues via OpenStreetMap Nominatim.';
+    } catch (error) {
+      summary.textContent = error.message;
+      note.textContent = 'La carte sera disponible lors de la prochaine recherche.';
+    }
+  };
+})();
+</script>

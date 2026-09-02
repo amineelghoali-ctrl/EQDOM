@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accès Responsable requis | EQDOM</title>
+  <script>
+    tailwind = { config: { theme: { extend: { colors: { blue: {
+      50: '#fff1f2', 100: '#ffe4e6', 200: '#fecdd3', 300: '#fda4af',
+      400: '#fb7185', 500: '#f43f5e', 600: '#e11d48', 700: '#be123c',
+      800: '#9f1239', 900: '#881337', 950: '#4c0519'
+    } } } } };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="grid min-h-screen place-items-center bg-slate-100 p-5 text-slate-900">
+  <main class="w-full max-w-lg rounded-3xl bg-white p-8 text-center shadow-xl ring-1 ring-slate-200">
+    <div class="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-blue-50 text-3xl">🔐</div>
+    <p class="mt-6 text-sm font-bold uppercase tracking-[.18em] text-blue-700">Accès protégé</p>
+    <h1 class="mt-2 text-2xl font-bold">Espace Responsable requis</h1>
+    <p class="mt-4 text-slate-600">Vous êtes connecté avec le compte <strong>{{ request.user.username }}</strong>, qui possède le rôle Agent. Les validations et refus de dossiers sont réservés au Responsable.</p>
+    <div class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+      <a href="/dashboard/" class="rounded-xl border border-slate-200 px-5 py-3 font-bold text-slate-700 hover:bg-slate-50">Retour espace agent</a>
+      <a href="/responsable/login/" class="rounded-xl bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800">Connexion responsable</a>
+    </div>
+  </main>
+</body>
+</html>

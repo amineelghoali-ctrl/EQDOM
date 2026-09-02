@@ -1,0 +1,55 @@
+<section id="workflow-panel" class="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+  <div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+    <div><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">Workflow & Échanges Internes</p><h2 class="mt-1 text-xl font-bold">Traitement collaboratif du dossier</h2></div>
+    <div class="flex flex-wrap items-center gap-3"><span class="text-sm font-medium text-slate-500">Étape actuelle</span><select id="workflow-status" class="rounded-xl border-slate-300 bg-slate-50 text-sm font-bold"></select><span class="text-sm font-medium text-slate-500">Agent</span><select id="workflow-assignee" class="rounded-xl border-slate-300 bg-slate-50 text-sm font-bold"></select></div>
+  </div>
+  <div class="mt-6 overflow-hidden rounded-xl bg-slate-100"><div class="h-2 bg-slate-200"><div id="workflow-progress" class="h-2 w-1/6 bg-blue-600 transition-all duration-500"></div></div><div class="grid grid-cols-6 gap-1 p-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500 sm:text-xs"><span>Scan</span><span>Docs</span><span>Pré-accord</span><span>Validation</span><span>Financement</span><span>Refusé</span></div></div>
+  <div id="workflow-decision-notice" class="mt-5 hidden rounded-xl p-4 text-sm font-bold"></div>
+  <div class="mt-6 grid gap-6 lg:grid-cols-5">
+    <div class="lg:col-span-3"><div class="flex items-center justify-between"><h3 class="font-bold">Fil de discussion</h3><span id="workflow-assignee" class="text-sm text-slate-500">—</span></div><div id="workflow-comments" class="mt-4 space-y-4"><p class="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Chargement des échanges…</p></div></div>
+    <form id="workflow-comment-form" class="rounded-2xl border border-slate-200 bg-slate-50 p-5 lg:col-span-2"><h3 class="font-bold">Ajouter une note</h3><p class="mt-1 text-sm text-slate-500">Visible uniquement par les agents.</p><textarea id="workflow-comment-content" required maxlength="3000" rows="6" class="mt-4 w-full rounded-xl border-slate-300" placeholder="Ex. Documents complémentaires demandés au client…"></textarea><button class="mt-3 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white hover:bg-blue-800" type="submit">Publier dans le Workflow</button></form>
+  </div>
+</section>
+
+<script>
+(() => {
+  const statuses = {SCAN_COMPLETED: ['Scan terminé', 'w-1/6', 'bg-blue-600'], PENDING_DOCS: ['Documents en attente', 'w-2/6', 'bg-orange-500'], PRE_APPROVED: ['Pré-accord', 'w-3/6', 'bg-blue-600'], PENDING_VALIDATION: ['En attente de validation responsable', 'w-4/6', 'bg-orange-500'], FINANCEMENT: ['Financement', 'w-5/6', 'bg-emerald-500'], REFUSE: ['Refusé', 'w-full', 'bg-red-500']};
+  const isResponsable = '{{ request.user.profile.role|default:"" }}' === 'RESPONSABLE';
+  const select = document.querySelector('#workflow-status'), assignee = document.querySelector('#workflow-assignee'), comments = document.querySelector('#workflow-comments'), progress = document.querySelector('#workflow-progress'), decisionNotice = document.querySelector('#workflow-decision-notice');
+  let cin = null;
+  const csrf = () => document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
+  const escapeHtml = value => String(value).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+  const dateFormat = value => new Intl.DateTimeFormat('fr-FR', {dateStyle: 'medium', timeStyle: 'short'}).format(new Date(value));
+  select.innerHTML = Object.entries(statuses).map(([key, value]) => `<option value="${key}" ${!isResponsable && ['FINANCEMENT', 'REFUSE'].includes(key) ? 'disabled' : ''}>${value[0]}</option>`).join('');
+  function commentHtml(comment, reply = false) { const likeText = comment.liked_by_current_user ? '👍 Aimé' : '👍 Like'; return `<article class="${reply ? 'ml-5 border-l-2 border-blue-200 pl-4' : 'rounded-xl border border-slate-200 p-4'}"><div class="flex items-start justify-between gap-3"><div><p class="font-bold text-slate-800">${escapeHtml(comment.author_name)}</p><p class="mt-1 text-sm text-slate-700">${escapeHtml(comment.content)}</p></div><time class="shrink-0 text-xs text-slate-400">${dateFormat(comment.created_at)}</time></div><div class="mt-3 flex gap-3 text-xs font-bold"><button data-like="${comment.id}" class="text-blue-700 hover:text-blue-900">${likeText} (${comment.likes_count})</button><button data-reply="${comment.id}" class="text-slate-500 hover:text-slate-800">Répondre</button></div>${(comment.replies || []).map(item => commentHtml(item, true)).join('')}</article>`; }
+  function render(data) {
+    select.value = data.current_status;
+    select.disabled = !isResponsable && ['FINANCEMENT', 'REFUSE'].includes(data.current_status);
+    assignee.value = data.assigned_agent_id;
+    const state = statuses[data.current_status] || statuses.SCAN_COMPLETED;
+    progress.className = `h-2 ${state[1]} ${state[2]} transition-all duration-500`;
+    comments.innerHTML = data.comments.length ? data.comments.map(item => commentHtml(item)).join('') : '<p class="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Aucune note. Publiez la première information utile au traitement.</p>';
+    const notices = {
+      FINANCEMENT: ['bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200', 'Dossier accepté par le responsable : financement autorisé.'],
+      REFUSE: ['bg-red-50 text-red-800 ring-1 ring-red-200', 'Dossier refusé par le responsable. Consultez la note du responsable dans le fil de discussion.'],
+      PENDING_VALIDATION: ['bg-orange-50 text-orange-800 ring-1 ring-orange-200', 'Dossier transmis au responsable : décision en attente.'],
+    };
+    const notice = notices[data.current_status];
+    if (notice) {
+      decisionNotice.className = `mt-5 rounded-xl p-4 text-sm font-bold ${notice[0]}`;
+      decisionNotice.textContent = notice[1];
+    } else {
+      decisionNotice.className = 'mt-5 hidden rounded-xl p-4 text-sm font-bold';
+      decisionNotice.textContent = '';
+    }
+  }
+  async function request(url, options = {}) { const response = await fetch(url, {credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf(), ...(options.headers || {})}, ...options}); const data = await response.json(); if (!response.ok) throw new Error(data.detail || 'Action impossible.'); return data; }
+  let agentsLoaded = false;
+  async function loadAgents() { if (agentsLoaded) return; const data = await request('/api/v1/workflow/agents/'); assignee.innerHTML = data.agents.map(agent => `<option value="${agent.id}">${escapeHtml(agent.username)}</option>`).join(''); agentsLoaded = true; }
+  window.loadWorkflow = async selectedCin => { cin = selectedCin; comments.innerHTML = '<p class="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Chargement des échanges…</p>'; try { await loadAgents(); render(await request(`/api/v1/workflow/${encodeURIComponent(cin)}/`)); } catch (error) { comments.innerHTML = `<p class="rounded-xl bg-red-50 p-4 text-sm text-red-700">${escapeHtml(error.message)}</p>`; } };
+  select.addEventListener('change', async () => { if (!cin) return; try { render(await request(`/api/v1/workflow/${encodeURIComponent(cin)}/status/`, {method: 'PATCH', body: JSON.stringify({current_status: select.value})})); } catch (error) { window.alert(error.message); window.loadWorkflow(cin); } });
+  assignee.addEventListener('change', async () => { if (!cin) return; try { render(await request(`/api/v1/workflow/${encodeURIComponent(cin)}/assign/`, {method: 'PATCH', body: JSON.stringify({agent_id: Number(assignee.value)})})); } catch (error) { window.alert(error.message); window.loadWorkflow(cin); } });
+  document.querySelector('#workflow-comment-form').addEventListener('submit', async event => { event.preventDefault(); if (!cin) return; const field = document.querySelector('#workflow-comment-content'); try { await request(`/api/v1/workflow/${encodeURIComponent(cin)}/comments/`, {method: 'POST', body: JSON.stringify({content: field.value})}); field.value = ''; window.loadWorkflow(cin); } catch (error) { window.alert(error.message); } });
+  comments.addEventListener('click', async event => { const like = event.target.closest('[data-like]'), reply = event.target.closest('[data-reply]'); try { if (like) await request(`/api/v1/workflow/comments/${like.dataset.like}/like/`, {method: 'POST', body: '{}'}); if (reply) { const content = window.prompt('Votre réponse interne :'); if (!content?.trim()) return; await request(`/api/v1/workflow/comments/${reply.dataset.reply}/reply/`, {method: 'POST', body: JSON.stringify({content})}); } if (like || reply) window.loadWorkflow(cin); } catch (error) { window.alert(error.message); } });
+})();
+</script>

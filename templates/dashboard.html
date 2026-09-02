@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Système des Agences EQDOM</title>
+  <script>
+    /* Palette de marque EQDOM : les utilitaires blue-* prennent le rouge EQDOM. */
+    tailwind = { config: { theme: { extend: { colors: { blue: {
+      50: '#fff1f2', 100: '#ffe4e6', 200: '#fecdd3', 300: '#fda4af',
+      400: '#fb7185', 500: '#f43f5e', 600: '#e11d48', 700: '#be123c',
+      800: '#9f1239', 900: '#881337', 950: '#4c0519'
+    } } } } };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <style>
+    /* Bande principale rouge EQDOM, indépendante du cache Tailwind. */
+    #eqdom-main-header { background: linear-gradient(105deg, #7f1d1d, #dc2626); }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-900 transition-colors">
+  <header id="eqdom-main-header" class="border-b border-red-900 text-white">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+      <a href="/" class="font-bold tracking-wide">EQDOM <span class="font-normal text-blue-200">Système des Agences</span></a>
+      <div class="flex items-center gap-4 text-sm">
+        <span>Agent : {{ request.user.username }}</span>
+        <button id="theme-toggle" class="rounded-lg bg-white/10 px-3 py-2 hover:bg-white/20" type="button">Mode sombre</button>
+        <a class="rounded-lg bg-white/10 px-3 py-2 hover:bg-white/20" href="/credit-simulator/">Simulateur crédit</a>
+        {% if request.user.profile.role == 'RESPONSABLE' %}<a class="rounded-lg bg-white/10 px-3 py-2 hover:bg-white/20" href="/responsable/dashboard/">Espace responsable</a>{% endif %}
+        {% if request.user.is_staff %}<a class="rounded-lg bg-white/10 px-3 py-2 hover:bg-white/20" href="/administration/">Statistiques</a>{% endif %}
+        <form method="post" action="/api-auth/logout/">
+          {% csrf_token %}
+          <button class="rounded-lg bg-white/10 px-3 py-2 hover:bg-white/20" type="submit">Déconnexion</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl px-5 py-8">
+    <div class="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-wider text-blue-700">Espace agent</p>
+        <h1 class="mt-1 text-3xl font-bold">Recherche dossier client</h1>
+        <p class="mt-2 text-slate-600">Recherchez un dossier par CIN saisie ou par image.</p>
+      </div>
+      <div class="flex w-full flex-col gap-3 md:w-auto">
+        <form id="cin-search-form" class="flex gap-2"><input id="cin-search-input" required maxlength="20" class="w-full rounded-xl border-slate-300 bg-white px-3 py-2 text-sm shadow-sm md:w-64" placeholder="Rechercher par CIN"><button class="rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Rechercher</button><button id="cin-image-search" type="button" class="rounded-xl bg-slate-700 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800">📸 CIN par image</button></form>
+      </div>
+    </div>
+
+    <div id="loading" class="hidden rounded-2xl bg-white p-10 text-center text-slate-500 shadow-sm">Chargement du dossier…</div>
+    <div id="error" class="hidden rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800"></div>
+    <section id="new-client-alert" class="hidden rounded-2xl border border-blue-200 bg-blue-50 p-7 shadow-sm"><div class="flex flex-col items-start justify-between gap-5 md:flex-row md:items-center"><div class="flex gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-blue-700 text-2xl text-white">!</span><div><p class="text-lg font-bold text-blue-950">Client inexistant (Nouveau client)</p><p id="new-client-message" class="mt-1 text-sm text-blue-800">—</p></div></div><button id="start-cin-scan" class="rounded-xl bg-blue-700 px-5 py-3 font-bold text-white shadow-sm hover:bg-blue-800">📸 Démarrer le Scan CIN</button></div></section>
+    <section id="incomplete-client" class="hidden rounded-2xl border border-blue-200 bg-white p-7 shadow-sm">
+      <div class="flex flex-col justify-between gap-5 md:flex-row md:items-center">
+        <div class="flex gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-blue-700 text-2xl text-white">✓</span><div><p class="text-lg font-bold text-slate-900">Dossier client enregistré</p><p id="incomplete-client-name" class="mt-1 font-semibold text-slate-700">—</p><p id="incomplete-client-cin" class="mt-1 font-mono text-sm text-slate-500">—</p><p class="mt-3 text-sm text-slate-600">Dossier en cours de constitution : les informations Core Banking seront ajoutées après étude du crédit.</p></div></div>
+        <a id="complete-client-link" href="#" class="rounded-xl bg-blue-700 px-5 py-3 text-center font-bold text-white hover:bg-blue-800">Modifier les informations</a>
+      </div>
+    </section>
+    <div id="diagnostic" class="hidden">
+      <div class="mb-6 flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <span class="text-sm font-semibold text-slate-500">Statut du dossier</span>
+        <span id="traffic-light" class="rounded-full px-3 py-1 text-sm font-bold">—</span>
+      </div>
+      {% include "fasttrack/core_banking_card.html" %}
+      {% include "fasttrack/agency_location.html" %}
+      {% include "fasttrack/documents_checklist.html" %}
+      {% include "fasttrack/contract_signature.html" %}
+      {% include "fasttrack/client_timeline.html" %}
+      {% include "fasttrack/workflow_collaboration.html" %}
+    </div>
+  </main>
+
+  <dialog id="cin-scan-modal" class="w-full max-w-lg rounded-2xl p-0 shadow-2xl backdrop:bg-slate-950/50"><form id="cin-scan-form" class="p-6"><div class="flex items-center justify-between"><div><p id="scan-modal-kicker" class="text-sm font-bold uppercase tracking-wide text-blue-700">Nouveau client</p><h2 id="scan-modal-title" class="mt-1 text-xl font-bold">Scan CIN</h2></div><button data-close-scan type="button" class="text-2xl text-slate-500">×</button></div><p id="scan-modal-description" class="mt-3 text-sm text-slate-600">La CIN est préremplie depuis votre recherche. Ajoutez une image pour lancer le traitement sécurisé.</p><label id="scan-cin-field" class="mt-5 block text-sm font-semibold">CIN<input id="scan-cin-number" name="cin_number" readonly class="mt-1 block w-full rounded-xl border-slate-300 bg-slate-100"></label><label class="mt-4 block text-sm font-semibold">Image de la CIN<input name="image" required accept="image/*" capture="environment" type="file" class="mt-1 block w-full rounded-xl border border-slate-300 bg-white p-2 text-sm"></label><p id="scan-feedback" class="mt-4 hidden rounded-xl p-3 text-sm"></p><div class="mt-6 flex justify-end gap-3"><button data-close-scan type="button" class="rounded-xl px-4 py-2 font-semibold text-slate-700">Annuler</button><button type="submit" class="rounded-xl bg-blue-700 px-4 py-2 font-bold text-white">Lancer le scan</button></div></form></dialog>
+
+  <script>
+    const loading = document.querySelector('#loading');
+    const error = document.querySelector('#error');
+    const diagnostic = document.querySelector('#diagnostic');
+    const newClientAlert = document.querySelector('#new-client-alert');
+    const incompleteClient = document.querySelector('#incomplete-client');
+    const cinSearchForm = document.querySelector('#cin-search-form');
+    const cinSearchInput = document.querySelector('#cin-search-input');
+    let currentClient = null;
+    const money = value => `${Number(value || 0).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} DH`;
+
+    function setText(selector, value) { document.querySelector(selector).textContent = value ?? '—'; }
+    function showIncompleteClient(payload) {
+      const identity = payload.identite || payload.client?.identite;
+      if (!identity) return;
+      document.querySelector('#incomplete-client-name').textContent = `${identity.prenom} ${identity.nom}`;
+      document.querySelector('#incomplete-client-cin').textContent = `CIN : ${identity.cin_number}`;
+      document.querySelector('#complete-client-link').href = payload.completion_url || `/dossiers/${encodeURIComponent(identity.cin_number)}/complete/`;
+      diagnostic.classList.add('hidden'); newClientAlert.classList.add('hidden'); incompleteClient.classList.remove('hidden');
+    }
+
+    function populate(data) {
+      currentClient = data;
+      const identity = data.identite, core = data.core_banking, overdue = data.situation_impayes;
+      setText('[data-client-name]', `${identity.prenom} ${identity.nom}`);
+      setText('[data-cin]', identity.cin_number);
+      document.querySelector('[data-download-pdf]').href = `/api/v1/agent/client/${encodeURIComponent(identity.cin_number)}/dossier-pdf/`;
+      setText('[data-phone]', identity.telephone);
+      setText('[data-ville]', identity.ville || 'Non renseignée');
+      setText('[data-adresse]', identity.adresse || 'Non renseignée');
+      setText('[data-employeur]', identity.employeur || 'Non renseigné');
+      setText('[data-drpp-cnss]', `${identity.drpp_number || '—'} / ${identity.cnss_number || '—'}`);
+      setText('[data-face-score]', `${Math.round(identity.face_match_score * 100)} %`);
+      setText('[data-produit]', core.produit);
+      setText('[data-dossier-etat]', `${core.numero_dossier || '—'} · ${core.etat}`);
+      setText('[data-mensualite]', money(core.mensualite));
+      setText('[data-restant-du]', money(core.mt_restant_du));
+      setText('[data-echeances]', core.nb_mensualites_restantes);
+      setText('[data-total-a-regler]', money(overdue.total_a_regler));
+      setText('[data-penalites]', money(overdue.penalite_retard));
+      setText('[data-nbr-impayes]', overdue.nbr_impayes);
+      setText('[data-situation]', `${core.situation}${core.restructuration ? ' · Restructuré' : ''}`);
+      setText('[data-provenance-revendeur]', `${core.provenance || '—'} / ${core.revendeur || '—'}`);
+      setText('[data-dates-credit]', `${core.date_acceptation || '—'} / ${core.date_financement || '—'}`);
+      setText('[data-dates-echeance]', `${core.date_premiere_echeance || '—'} / ${core.date_derniere_echeance || '—'}`);
+      setText('[data-montant-finance]', money(core.montant_finance));
+      setText('[data-total-traite]', money(core.total_traite));
+      setText('[data-reports]', `${core.nbr_reports} / ${money(core.frais_report)}`);
+      setText('[data-honoraires]', money(core.honoraires_avocat));
+      setText('[data-provision]', `${money(core.montant_solde_provision)} / ${money(core.montant_compense)}`);
+      window.loadAgencyLocation?.(identity.cin_number);
+      window.loadDocuments?.(identity.cin_number);
+      window.loadTimeline?.(identity.cin_number);
+
+      const badge = document.querySelector('[data-biometric-badge]');
+      badge.textContent = identity.liveness_verified ? '✓ Biométrie vérifiée' : '⚠ Biométrie à vérifier';
+      badge.className = identity.liveness_verified ? 'rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700' : 'rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700';
+      const traffic = document.querySelector('#traffic-light');
+      const colors = {green: 'bg-emerald-100 text-emerald-800', orange: 'bg-orange-100 text-orange-800', red: 'bg-red-100 text-red-800'};
+      traffic.className = `rounded-full px-3 py-1 text-sm font-bold ${colors[data.feu_tricolore.color] || 'bg-slate-100 text-slate-700'}`;
+      traffic.textContent = data.feu_tricolore.label;
+      document.querySelector('[data-alert-card]').className = overdue.nbr_impayes >= 3 ? 'rounded-2xl border border-red-200 bg-red-50 p-6' : 'rounded-2xl border border-orange-200 bg-orange-50 p-6';
+    }
+
+    async function loadClient(cin) {
+      if (!cin || cin === 'Aucun client disponible') return;
+      loading.classList.remove('hidden'); error.classList.add('hidden'); diagnostic.classList.add('hidden'); newClientAlert.classList.add('hidden'); incompleteClient.classList.add('hidden');
+      try {
+        const response = await fetch(`/api/v1/agent/client/${encodeURIComponent(cin)}/fast-track-diagnostic/`);
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.detail || 'Impossible de charger ce dossier. Vérifiez votre connexion agent.');
+        }
+        const payload = await response.json();
+        if (payload.incomplete_profile) { showIncompleteClient(payload); return; }
+        populate(payload);
+        diagnostic.classList.remove('hidden');
+        // Le canvas doit être visible avant son dimensionnement, sinon les
+        // coordonnées du pointeur sont calculées sur une largeur nulle.
+        window.loadContractSignature?.(payload.identite.cin_number);
+        window.loadWorkflow?.(cin);
+      } catch (err) { error.textContent = err.message; error.classList.remove('hidden'); }
+      finally { loading.classList.add('hidden'); }
+    }
+
+    cinSearchForm.addEventListener('submit', async event => {
+      event.preventDefault(); const cin = cinSearchInput.value.trim().toUpperCase(); if (!cin) return;
+      loading.classList.remove('hidden'); error.classList.add('hidden'); diagnostic.classList.add('hidden'); newClientAlert.classList.add('hidden');
+      try { const response = await fetch(`/api/v1/agent/search-client/?cin=${encodeURIComponent(cin)}`); const result = await response.json(); if (!response.ok) throw new Error(result.detail || 'Recherche impossible.'); if (!result.exists) { document.querySelector('#new-client-message').textContent = `La CIN ${result.cin_searched} ne correspond à aucun dossier. Vous pouvez démarrer un nouveau scan.`; document.querySelector('#start-cin-scan').dataset.cin = result.cin_searched; newClientAlert.classList.remove('hidden'); return; } await loadClient(cin); } catch (err) { error.textContent = err.message; error.classList.remove('hidden'); } finally { loading.classList.add('hidden'); }
+    });
+
+    function csrfToken() {
+      return document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
+    }
+    async function readApiResponse(response) {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) return response.json();
+      // Une session expirée ou une erreur serveur peut produire une page HTML.
+      // Le message reste compréhensible au lieu de l'erreur « token < ».
+      if (response.status === 403 || response.status === 401) {
+        return {detail: 'Votre session a expiré. Connectez-vous de nouveau puis relancez le scan.'};
+      }
+      return {detail: 'Le serveur a renvoyé une réponse invalide. Rechargez la page et réessayez le scan.'};
+    }
+    const scanModal = document.querySelector('#cin-scan-modal');
+    let scanSearchMode = false;
+    document.querySelector('#start-cin-scan').addEventListener('click', event => { scanSearchMode = false; document.querySelector('#scan-modal-kicker').textContent = 'Nouveau client'; document.querySelector('#scan-modal-title').textContent = 'Scan CIN'; document.querySelector('#scan-modal-description').textContent = 'La CIN est préremplie depuis votre recherche. Ajoutez une image pour créer le nouveau dossier.'; document.querySelector('#scan-cin-field').classList.remove('hidden'); document.querySelector('#scan-cin-number').value = event.currentTarget.dataset.cin; document.querySelector('#scan-feedback').classList.add('hidden'); scanModal.showModal(); });
+    document.querySelector('#cin-image-search').addEventListener('click', () => { scanSearchMode = true; document.querySelector('#scan-modal-kicker').textContent = 'Recherche par image'; document.querySelector('#scan-modal-title').textContent = 'Scanner une CIN marocaine'; document.querySelector('#scan-modal-description').textContent = 'Importez une image de CIN. EasyOCR lit le numéro localement puis l’application recherche le dossier.'; document.querySelector('#scan-cin-field').classList.add('hidden'); document.querySelector('#scan-cin-number').value = ''; document.querySelector('#scan-feedback').classList.add('hidden'); scanModal.showModal(); });
+    document.querySelectorAll('[data-close-scan]').forEach(button => button.addEventListener('click', () => scanModal.close()));
+    function redirectToCompletion(payload) { const result = payload.result || payload; const url = result.creation_url || result.completion_url || `/dossiers/nouveau/?cin=${encodeURIComponent(result.cin || result.cin_searched)}`; window.location.href = url; }
+    async function waitForScan(jobId) { const feedback = document.querySelector('#scan-feedback'); const response = await fetch(`/api/v1/jobs/${encodeURIComponent(jobId)}/status/`); const result = await response.json(); if (result.status === 'SUCCESS') { feedback.textContent = 'Scan terminé. Ouverture de la fiche à compléter…'; feedback.className = 'mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800'; setTimeout(() => redirectToCompletion(result), 700); return; } if (result.status === 'FAILURE') { feedback.textContent = 'Le scan a échoué. Réessayez avec une image lisible.'; feedback.className = 'mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800'; return; } setTimeout(() => waitForScan(jobId), 1500); }
+    document.querySelector('#cin-scan-form').addEventListener('submit', async event => { event.preventDefault(); const feedback = document.querySelector('#scan-feedback'); const submit = event.target.querySelector('button[type="submit"]'); submit.disabled = true; submit.textContent = 'Analyse en cours…'; try { const endpoint = scanSearchMode ? '/api/v1/agent/scan-search/' : '/api/v1/agent/scan-cin/'; const response = await fetch(endpoint, {method: 'POST', headers: {'X-CSRFToken': csrfToken()}, credentials: 'same-origin', body: new FormData(event.target)}); const result = await readApiResponse(response); if (!response.ok) throw new Error(result.detail || 'Le scan ne peut pas être lancé.'); if (scanSearchMode) { if (result.exists && !result.completion_url) { feedback.textContent = 'Dossier existant trouvé. Ouverture du diagnostic…'; feedback.className = 'mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-800'; setTimeout(() => { scanModal.close(); loadClient(result.client.identite.cin_number); }, 600); return; } feedback.textContent = `CIN ${result.cin_searched} détectée. Ouverture de la fiche client…`; feedback.className = 'mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800'; setTimeout(() => redirectToCompletion(result), 700); return; } if (result.exists && !(result.result || {}).completion_url) { feedback.textContent = 'Dossier existant trouvé. Ouverture du diagnostic…'; feedback.className = 'mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-800'; setTimeout(() => { scanModal.close(); loadClient(result.cin_searched); }, 600); return; } if (result.status === 'SUCCESS') { feedback.textContent = 'Scan terminé. Ouverture de la fiche à compléter…'; feedback.className = 'mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800'; setTimeout(() => redirectToCompletion(result), 700); return; } feedback.textContent = `Scan lancé (job ${result.job_id}). Analyse de l'image en cours…`; feedback.className = 'mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-800'; waitForScan(result.job_id); } catch (err) { feedback.textContent = err.message; feedback.className = 'mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800'; } finally { submit.disabled = false; submit.textContent = 'Lancer le scan'; } });
+    document.querySelector('[data-action-whatsapp]').addEventListener('click', async () => {
+      if (!currentClient) return;
+      if (!window.confirm(`Confirmez-vous avoir vérifié le numéro de ${currentClient.identite.prenom} ${currentClient.identite.nom} avant de préparer ce message ?`)) return;
+      try {
+        const response = await fetch(`/api/v1/agent/client/${encodeURIComponent(currentClient.identite.cin_number)}/whatsapp-message/`, {
+          method: 'POST', headers: {'X-CSRFToken': csrfToken()}, credentials: 'same-origin'
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || 'Impossible de préparer la relance.');
+        window.open(payload.whatsapp_url, '_blank', 'noopener');
+      } catch (err) { window.alert(err.message); }
+    });
+    const themeToggle = document.querySelector('#theme-toggle');
+    const applyTheme = theme => { const dark = theme === 'dark'; document.documentElement.classList.toggle('dark', dark); document.body.classList.toggle('bg-slate-950', dark); document.body.classList.toggle('text-slate-100', dark); document.body.classList.toggle('bg-slate-100', !dark); document.body.classList.toggle('text-slate-900', !dark); themeToggle.textContent = dark ? 'Mode clair' : 'Mode sombre'; };
+    applyTheme(localStorage.getItem('eqdom-theme') || 'light');
+    themeToggle.addEventListener('click', () => { const next = document.documentElement.classList.contains('dark') ? 'light' : 'dark'; localStorage.setItem('eqdom-theme', next); applyTheme(next); });
+    // Après l'enregistrement d'un nouveau profil, la redirection contient sa
+    // CIN : on affiche donc immédiatement la fiche « en constitution ».
+    const openedCin = new URLSearchParams(window.location.search).get('cin');
+    if (openedCin) loadClient(openedCin);
+    document.addEventListener('keydown', event => { if (!event.altKey) return; if (event.key.toLowerCase() === 's') { event.preventDefault(); document.querySelector('#cin-image-search').click(); } if (event.key.toLowerCase() === 'f') { event.preventDefault(); cinSearchInput.focus(); } });
+  </script>
+</body>
+</html>

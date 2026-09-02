@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Système des Agences EQDOM | Nouveau dossier</title>
+  <script>
+    tailwind = { config: { theme: { extend: { colors: { blue: { 50:'#fff1f2',100:'#ffe4e6',200:'#fecdd3',700:'#be123c',800:'#9f1239' } } } } };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-900">
+  <header class="bg-gradient-to-r from-red-950 to-red-600 text-white"><div class="mx-auto flex max-w-5xl items-center justify-between px-5 py-4"><a href="/dashboard/" class="font-bold">EQDOM <span class="font-normal text-red-100">Système des Agences</span></a><span class="text-sm">Agent : {{ request.user.username }}</span></div></header>
+  <main class="mx-auto max-w-5xl px-5 py-8">
+    <a href="/dashboard/" class="text-sm font-bold text-blue-700">← Retour à la recherche</a>
+    <section class="mt-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
+      <p class="text-sm font-bold uppercase tracking-wide text-blue-700">Dossier issu du scan CIN</p>
+      <h1 class="mt-1 text-3xl font-bold">Ajouter un nouveau client</h1>
+      <p class="mt-2 text-slate-600">La CIN, le nom et le prénom proviennent de l'OCR. Vérifiez-les puis renseignez les champs restants avec le client.</p>
+      <div class="mt-5 grid gap-3 rounded-xl bg-red-50 p-4 text-sm text-red-900 sm:grid-cols-3"><div><span class="block text-xs font-bold uppercase text-red-700">CIN</span>{{ client.cin_number }}</div><div><span class="block text-xs font-bold uppercase text-red-700">Nom détecté</span>{{ client.nom }}</div><div><span class="block text-xs font-bold uppercase text-red-700">Prénom détecté</span>{{ client.prenom }}</div></div>
+      <form method="post" class="mt-7 grid gap-5 md:grid-cols-2">{% csrf_token %}
+        {% if is_new_client %}<input type="hidden" name="cin" value="{{ client.cin_number }}">{% endif %}
+        {% for field in form %}{% if field.name == 'produit' %}<div class="md:col-span-2 mt-3 border-t border-slate-200 pt-6"><p class="text-sm font-bold uppercase tracking-wide text-blue-700">Demande de crédit</p><h2 class="mt-1 text-xl font-bold">Informations à soumettre au responsable</h2><p class="mt-1 text-sm text-slate-600">Le responsable décidera ensuite d’accepter le financement ou de refuser le dossier avec un motif.</p></div>{% endif %}<div class="{% if field.name == 'adresse' %}md:col-span-2{% endif %}"><label for="{{ field.id_for_label }}" class="block text-sm font-bold text-slate-700">{{ field.label }}</label>{{ field }}{% if field.errors %}<p class="mt-1 text-sm text-red-700">{{ field.errors|striptags }}</p>{% endif %}</div>{% endfor %}
+        <div class="md:col-span-2 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-5"><a href="/dashboard/" class="rounded-xl px-5 py-3 font-bold text-slate-600">Annuler</a><button class="rounded-xl bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800" type="submit">{% if is_new_client %}Enregistrer et transmettre au responsable{% else %}Enregistrer les modifications{% endif %}</button></div>
+      </form>
+    </section>
+  </main>
+  <style>input, textarea { width:100%; margin-top:.4rem; border:1px solid #cbd5e1; border-radius:.75rem; padding:.7rem .8rem; } input:focus, textarea:focus { outline:2px solid #fda4af; border-color:#be123c; }</style>
+</body>
+</html>

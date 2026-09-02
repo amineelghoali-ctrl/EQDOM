@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion Responsable | EQDOM</title>
+  <script>
+    tailwind = { config: { theme: { extend: { colors: { blue: {
+      50: '#fff1f2', 100: '#ffe4e6', 200: '#fecdd3', 300: '#fda4af',
+      400: '#fb7185', 500: '#f43f5e', 600: '#e11d48', 700: '#be123c',
+      800: '#9f1239', 900: '#881337', 950: '#4c0519'
+    } } } } };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>#eqdom-responsable-login-banner { background: linear-gradient(105deg, #7f1d1d, #dc2626); }</style>
+</head>
+<body class="grid min-h-screen place-items-center bg-slate-100 p-5 text-slate-900">
+  <main class="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-slate-200">
+    <div id="eqdom-responsable-login-banner" class="px-8 py-8 text-white">
+      <p class="text-sm font-bold uppercase tracking-[.18em] text-blue-200">EQDOM</p>
+      <h1 class="mt-2 text-2xl font-bold">Connexion Responsable</h1>
+      <p class="mt-2 text-sm text-blue-100">Accès aux décisions et validations des dossiers.</p>
+    </div>
+    <form method="post" class="p-8">
+      {% csrf_token %}
+      {% if error %}<p class="mb-5 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-800">{{ error }}</p>{% endif %}
+      <label class="block text-sm font-semibold">Nom d'utilisateur<input name="username" required autofocus autocomplete="username" class="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-3 shadow-sm focus:border-blue-700 focus:outline-none"></label>
+      <label class="mt-5 block text-sm font-semibold">Mot de passe<input name="password" type="password" required autocomplete="current-password" class="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-3 shadow-sm focus:border-blue-700 focus:outline-none"></label>
+      <button class="mt-7 w-full rounded-xl bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800" type="submit">Accéder à l'espace responsable</button>
+      <a href="/" class="mt-5 block text-center text-sm font-semibold text-slate-600 hover:text-slate-900">← Retour à l'accueil</a>
+    </form>
+  </main>
+</body>
+</html>

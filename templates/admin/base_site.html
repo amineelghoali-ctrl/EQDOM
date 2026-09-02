@@ -1,0 +1,23 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | EQDOM Pilotage{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'admin/eqdom_admin.css' %}">
+{% endblock %}
+
+{% block branding %}
+  <a class="eqdom-brand" href="{% url 'admin:index' %}">
+    <span class="eqdom-brand-mark">E</span>
+    <span><strong>EQDOM</strong><small>SYSTÈME DES AGENCES · ADMINISTRATION</small></span>
+  </a>
+{% endblock %}
+
+{% block nav-global %}
+  <a class="eqdom-back-link" href="{% url 'administration' %}">← Centre de pilotage</a>
+{% endblock %}
+
+{# Le menu latéral Django est remplacé par le Centre de pilotage EQDOM. #}
+{% block nav-sidebar %}{% endblock %}

@@ -1,0 +1,9 @@
+Django>=4.2,<5.3
+djangorestframework>=3.14,<3.17
+celery[redis]>=5.3,<6.0
+redis>=5.0,<8.0
+Pillow>=10.0
+Faker>=20.0
+reportlab>=4.0
+pypdf>=5.0
+easyocr>=1.7,<2.0
